@@ -1,46 +1,81 @@
-```js
-/* dYdX Rebate Bot – Render / Railway latest (2026-03-28) */
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
+const cron = require('node-cron');
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
-const ADMIN_ID = process.env.ADMIN_ID;
-const CHANNEL_ID = process.env.CHANNEL_ID;
-const REF_LINK = process.env.REF_LINK;
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const ADMIN_ID = String(process.env.ADMIN_ID || '');
+const CHANNEL_ID = process.env.CHANNEL_ID || '';
+const REF_LINK = process.env.REF_LINK || '';
 
-/* >>>>> NEW ENGLISH COPY <<<<< */
-const rebateCopy = `🎯 40% rebate on dYdX Layer2 perpetuals. Trade through ${REF_LINK} and the bot automatically applies the refund—no extra steps, just trade as usual. Every order counts toward your rebate, and we publish weekly rebate rankings + funding reminders in the same channel.`;
+if (!BOT_TOKEN) {
+  throw new Error('Missing BOT_TOKEN in environment variables');
+}
 
-/* ------------------ Commands ------------------ */
-bot.start(ctx => {
-  const name = ctx.from.username || ctx.from.first_name || 'Trader';
-  ctx.reply(`Welcome ${name}! Use /rebate to see the 40% rebate details, /link to grab the referral, and stay tuned for funding / arbitrage tips in the channel.`);
+const bot = new Telegraf(BOT_TOKEN);
+
+const rebateCopy = `40% rebate on dYdX Layer-2 perpetuals.
+Trade through ${REF_LINK}. The bot auto-applies the refund, with zero extra steps.
+Every order counts toward your rebate.
+Weekly leaderboard and funding reminders are posted right here.`;
+
+const linkCopy = `Open dYdX with 40% rebate: ${REF_LINK}
+Bookmark it, or come back to /link any time.`;
+
+const weeklyBroadcast = `Weekly Rebate Rankings are live.
+Top 10 traders by volume: check the pinned post.
+New to rebates? Hit /rebate for the 40% guide or /link for your personal ref.
+Trade smart, earn back.`;
+
+// /start
+bot.start(async (ctx) => {
+  const name = ctx.from.first_name || ctx.from.username || 'Trader';
+  const startCopy = `Welcome ${name}!
+Use /rebate to see the 40% rebate details, /link to grab your referral, and stay tuned for weekly funding and arbitrage alerts in this channel.`;
+  await ctx.reply(startCopy);
 });
 
-bot.command('rebate', (ctx) => ctx.reply(rebateCopy));
-bot.command('link', (ctx) => ctx.reply(
-  `Tap here to open dYdX with the 40% rebate: ${REF_LINK}\nYou can always come back to this message or run /rebate to get the latest reminder.`
-));
+// /rebate
+bot.command('rebate', async (ctx) => {
+  await ctx.reply(rebateCopy);
+});
 
-bot.on('text', (ctx) => {
-  const isAdmin = ctx.from.id.toString() === ADMIN_ID;
-  const txt = ctx.update.message.text || '';
+// /link
+bot.command('link', async (ctx) => {
+  await ctx.reply(linkCopy);
+});
 
-  if (txt === '/admin' && isAdmin) {
-    ctx.reply('Admin command acknowledged (version: 2026-03-28-utf8-new)');
-    ctx.reply(`Channel ID: ${CHANNEL_ID || 'not-set'}`);
+// /admin
+bot.command('admin', async (ctx) => {
+  if (String(ctx.from.id) !== ADMIN_ID) return;
+
+  await ctx.reply(`Admin OK
+Channel ID: ${CHANNEL_ID || 'not-set'}
+Deploy: ${process.env.RENDER_GIT_COMMIT || 'local'}`);
+});
+
+// 周一 09:00 UTC 自动发频道
+cron.schedule('0 9 * * 1', async () => {
+  if (!CHANNEL_ID) {
+    console.log('Skip weekly broadcast: CHANNEL_ID not set');
     return;
   }
 
-  ctx.reply('Send /rebate or /link to get your 40% rebate info, or check the pinned post for updates.');
+  try {
+    await bot.telegram.sendMessage(CHANNEL_ID, weeklyBroadcast);
+    console.log('Weekly broadcast sent');
+  } catch (err) {
+    console.error('Weekly broadcast failed:', err.message);
+  }
 });
 
-/* Graceful shutdown */
+bot.launch()
+  .then(() => {
+    console.log('Bot started successfully');
+  })
+  .catch((err) => {
+    console.error('Bot launch failed:', err);
+    process.exit(1);
+  });
+
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
-
-bot.launch()
-  .then(() => console.log('Bot is running (v2026-03-28-utf8)'))
-  .catch(err => console.error('Launch error:', err));
-```
-
